@@ -182,5 +182,14 @@ fun CalculatorScreen(appPreferences: AppPreferences, onNavigateToSettings: () ->
             text = "初始资金: ${appPreferences.initialCapital} USD, 止损比例: ${appPreferences.stopLossPercentage}%, 杠杆: ${appPreferences.leverage}倍",
             modifier = Modifier.padding(bottom = 16.dp)
         )
+
+        // 交易时间说明
+        Text(text = "交易时间说明:", modifier = Modifier.padding(bottom = 8.dp))
+        Text(
+            text = "- 日线开始: 你的时间早上6:00 (对方时间0:00)\n" +
+                  "- 4小时K线开始: 6:00、10:00、14:00、18:00、22:00、次日2:00\n" +
+                  "  (每4小时循环一次，完美衔接日线)",
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
     }
 }
