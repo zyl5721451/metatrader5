@@ -25,14 +25,20 @@ data class ForexPair(val symbol: String, val baseCurrency: String, val contractS
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CalculatorScreen(appPreferences: AppPreferences, onNavigateToSettings: () -> Unit) {
-    // 常见外汇品种列表，包含基础货币、合约规模和每点价值
+    // 扩展外汇品种列表，包含用户要求的所有品种，更新每点价值
     val forexPairs = listOf(
-        ForexPair("EUR/USD", "EUR", 100000, 10.0),
-        ForexPair("USD/JPY", "USD", 100000, 8.33),
-        ForexPair("GBP/USD", "GBP", 100000, 10.0),
-        ForexPair("USD/CHF", "USD", 100000, 10.0),
-        ForexPair("AUD/USD", "AUD", 100000, 10.0),
-        ForexPair("USD/CAD", "USD", 100000, 10.0)
+        ForexPair("EUR/USD", "EUR", 100000, 1.0),    // 每点价值1.0USD/手
+        ForexPair("GBP/USD", "GBP", 100000, 1.0),    // 每点价值1.0USD/手
+        ForexPair("XAGUSD", "XAG", 5000, 5.0),      // 白银，每点价值5.0USD/手
+        ForexPair("XAU/USD", "XAU", 100, 1.0),       // 黄金，每点价值1.0USD/手
+        ForexPair("AUD/USD", "AUD", 100000, 1.0),    // 每点价值1.0USD/手
+        ForexPair("NZD/USD", "NZD", 100000, 1.0),    // 每点价值1.0USD/手
+        ForexPair("USD/CAD", "USD", 100000, 0.73),   // 每点价值0.73USD/手（CAD换算USD）
+        ForexPair("USD/CHF", "USD", 100000, 1.26),   // 每点价值1.26USD/手（CHF换算USD）
+        ForexPair("USD/CNH", "USD", 100000, 0.14),   // 每点价值0.14USD/手（CNH换算USD）
+        ForexPair("USD/JPY", "USD", 100000, 0.64),   // 每点价值0.64USD/手（JPY换算USD）
+        ForexPair("USD/SGD", "USD", 100000, 0.77),   // 每点价值0.77USD/手（SGD换算USD）
+        ForexPair("AUD/CAD", "AUD", 100000, 0.73)    // 每点价值0.73USD/手（CAD换算USD）
     )
 
     var selectedPair by remember { mutableStateOf(forexPairs[0]) }
@@ -45,6 +51,7 @@ fun CalculatorScreen(appPreferences: AppPreferences, onNavigateToSettings: () ->
     fun calculateLotSize() {
         try {
             val entry = entryPrice.toDouble()
+            val exit = exitPrice.toDouble()
             val capital = appPreferences.initialCapital
             val leverage = appPreferences.leverage
             val stopLossPercent = appPreferences.stopLossPercentage / 100
@@ -57,18 +64,34 @@ fun CalculatorScreen(appPreferences: AppPreferences, onNavigateToSettings: () ->
             // 第二步：计算止损金额
             val stopLossAmount = capital * stopLossPercent
 
-            // 第三步：计算点数差
-            val pipDifference = Math.abs(entry - exitPrice.toDouble())
+            // 第三步：计算价格差
+            val priceDifference = Math.abs(entry - exit)
+            
+            // 第四步：根据品种类型确定点值单位（1点的价格变动）
+            val pipUnit = when {
+                // 日元类货币对，1点=0.001（3位小数）
+                selectedPair.symbol.endsWith("JPY") -> 0.001
+                // 贵金属品种（黄金、白银），1点=0.001（3位小数）
+                selectedPair.symbol == "XAU/USD" || selectedPair.symbol == "XAGUSD" -> 0.001
+                // 其他主要货币对，1点=0.00001（5位小数）
+                else -> 0.00001
+            }
+            
+            // 第五步：计算实际点数差
+            val actualPipDifference = priceDifference / pipUnit
 
-            // 第四步：计算可开仓数量（以损定量）
-            // 可开仓数量 = 止损金额 ÷ (点数差 × 每手价值)
-            val calculatedLotSize = stopLossAmount / (pipDifference * selectedPair.pipValue)
+            // 第六步：计算可开仓数量（以损定量）
+            // 可开仓数量 = 止损金额 ÷ (实际点数差 × 每点价值)
+            val calculatedLotSize = stopLossAmount / (actualPipDifference * selectedPair.pipValue)
 
-            // 第五步：同时计算基于保证金的最大可开手数
+            // 第七步：同时计算基于保证金的最大可开手数
             val maxLotByMargin = capital / margin
 
             // 取较小值作为最终可开仓数量
-            val finalLotSize = Math.min(calculatedLotSize, maxLotByMargin)
+            var finalLotSize = Math.min(calculatedLotSize, maxLotByMargin)
+
+            // 调整取整规则：0.01手递增（四舍五入到两位小数）
+            finalLotSize = Math.round(finalLotSize * 100.0) / 100.0
 
             // 保留两位小数
             lotSize = String.format("%.2f", finalLotSize)

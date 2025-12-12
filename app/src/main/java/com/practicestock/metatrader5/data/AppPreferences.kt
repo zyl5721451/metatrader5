@@ -27,7 +27,7 @@ class AppPreferences(context: Context) {
         private const val KEY_STOP_LOSS_PERCENTAGE = "stop_loss_percentage"
         private const val KEY_LEVERAGE = "leverage"
         const val DEFAULT_INITIAL_CAPITAL = 10000.0
-        const val DEFAULT_STOP_LOSS_PERCENTAGE = 2.0
+        const val DEFAULT_STOP_LOSS_PERCENTAGE = 1.0
         const val DEFAULT_LEVERAGE = 20
     }
 }
