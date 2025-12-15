@@ -56,36 +56,58 @@ fun CalculatorScreen(appPreferences: AppPreferences, onNavigateToSettings: () ->
             val leverage = appPreferences.leverage
             val stopLossPercent = appPreferences.stopLossPercentage / 100
 
-            // 第一步：计算1标准手所需保证金
-            // 单标准手保证金 =（合约规模 × 当前汇率）÷ 杠杆
-            val margin = (selectedPair.contractSize * entry) / leverage
-            marginPerLot = String.format("%.2f", margin)
-
-            // 第二步：计算止损金额
+            // 第一步：计算止损金额
             val stopLossAmount = capital * stopLossPercent
 
-            // 第三步：计算价格差
+            // 第二步：计算价格差（止损价差）
             val priceDifference = Math.abs(entry - exit)
-            
-            // 第四步：根据品种类型确定点值单位（1点的价格变动）
-            val pipUnit = when {
-                // 日元类货币对，1点=0.001（3位小数）
-                selectedPair.symbol.endsWith("JPY") -> 0.001
-                // 贵金属品种（黄金、白银），1点=0.001（3位小数）
-                selectedPair.symbol == "XAU/USD" || selectedPair.symbol == "XAGUSD" -> 0.001
-                // 其他主要货币对，1点=0.00001（5位小数）
-                else -> 0.00001
+
+            // 第三步：根据货币对类型确定计算方式
+            val calculatedLotSize = when {
+                // 1. USD为基准货币的货币对（如USD/CNH、USD/CAD等）
+                selectedPair.symbol.startsWith("USD/") -> {
+                    // USD为基准货币：每手亏损金额 = 止损价差 × 合约规模 × 手数
+                    // 手数 = 单笔最大亏损 ÷ (止损价差 × 合约规模)
+                    stopLossAmount / (priceDifference * selectedPair.contractSize)
+                }
+                // 2. 贵金属品种（黄金、白银）
+                selectedPair.symbol == "XAU/USD" || selectedPair.symbol == "XAGUSD" -> {
+                    // 贵金属：每手亏损金额 = 止损价差 × 合约规模 × 手数
+                    // 手数 = 单笔最大亏损 ÷ (止损价差 × 合约规模)
+                    stopLossAmount / (priceDifference * selectedPair.contractSize)
+                }
+                // 3. 其他主要货币对（如EUR/USD、GBP/USD等）
+                else -> {
+                    // 其他货币对：使用点数计算
+                    // 确定点值单位（1点的价格变动）
+                    val pipUnit = if (selectedPair.symbol.endsWith("JPY")) {
+                        // 日元类货币对，1点=0.001（3位小数）
+                        0.001
+                    } else {
+                        // 其他主要货币对，1点=0.00001（5位小数）
+                        0.00001
+                    }
+                    
+                    // 计算实际点数差
+                    val actualPipDifference = priceDifference / pipUnit
+
+                    // 可开仓数量 = 止损金额 ÷ (实际点数差 × 每点价值)
+                    stopLossAmount / (actualPipDifference * selectedPair.pipValue)
+                }
             }
+
+            // 第四步：计算每手所需保证金和基于保证金的最大可开手数
+            val marginPerLotValue = if (selectedPair.symbol.startsWith("USD/")) {
+                // USD为基准货币：每手保证金 = 合约规模 ÷ 杠杆
+                selectedPair.contractSize.toDouble() / leverage.toDouble()
+            } else {
+                // 其他货币对：每手保证金 =（合约规模 × 当前汇率）÷ 杠杆
+                (selectedPair.contractSize.toDouble() * entry) / leverage.toDouble()
+            }
+            marginPerLot = String.format("%.2f", marginPerLotValue)
             
-            // 第五步：计算实际点数差
-            val actualPipDifference = priceDifference / pipUnit
-
-            // 第六步：计算可开仓数量（以损定量）
-            // 可开仓数量 = 止损金额 ÷ (实际点数差 × 每点价值)
-            val calculatedLotSize = stopLossAmount / (actualPipDifference * selectedPair.pipValue)
-
-            // 第七步：同时计算基于保证金的最大可开手数
-            val maxLotByMargin = capital / margin
+            // 计算基于保证金的最大可开手数
+            val maxLotByMargin = capital / marginPerLotValue
 
             // 取较小值作为最终可开仓数量
             var finalLotSize = Math.min(calculatedLotSize, maxLotByMargin)
